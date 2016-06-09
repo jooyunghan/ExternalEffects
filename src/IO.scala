@@ -75,5 +75,7 @@ object Main extends App {
 //  converter.run
 //
 //  read5Lines.flatMap(lines => PrintLine(lines.mkString("\n"))).run
-  factorialREPL.run
+//  factorialREPL.run
+  var p = forever(PrintLine("Still going.."))
+  p.run
 }

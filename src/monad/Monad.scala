@@ -50,8 +50,13 @@ object Monad {
     _ <- if (ok) doWhile(fa)(cond) else unit(())
   } yield ()
 
-  def when[F[_],A](cond: Boolean)(body: => F[Unit])(implicit m: Monad[F]): F[Unit] =
+  def when[F[_]:Monad, A](cond: Boolean)(body: => F[Unit]): F[Unit] =
     if (cond) body else unit(())
+
+  def forever[F[_]:Monad, A, B](fa: F[A]): F[B] = {
+    lazy val t: F[B] = forever(fa)
+    fa flatMap (_ => t)
+  }
 
   def foldM[F[_],A,B](l: Stream[A])(z: B)(f: (B,A) => F[B])(implicit m: Monad[F]): F[B] =
     l match {
