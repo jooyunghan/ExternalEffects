@@ -23,17 +23,33 @@ object player {
 
 object io {
 
-  trait IO {
+  trait IO { self =>
     def run: Unit
+    def ++(io: IO): IO = new IO {
+      def run = { self.run; io.run }
+    }
+  }
+
+  object IO {
+    def empty: IO = new IO { def run = () }
   }
 
   def PrintLine(msg: String): IO =
     new IO { def run = println(msg) }
+
+  def sequence(actions: List[IO]): IO = actions match {
+    case Nil => IO.empty
+    case a::as => a ++ sequence(as)
+  }
 }
 
 object Main extends App {
   import player._
+  import io._
 
-  var x: IO = contest(Player("LG", 3), Player("GS", 2))
+  val x: IO = contest(Player("LG", 3), Player("GS", 2))
   x.run
+
+  val helloWorld: IO = sequence(List(PrintLine("Hello"), PrintLine("World")))
+  helloWorld.run
 }
