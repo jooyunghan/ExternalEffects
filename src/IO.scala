@@ -17,7 +17,7 @@ object player {
     else None
 
   def contest(p1: Player, p2: Player): IO[Unit] =
-    PrintLine(winnerMsg(winner(p1, p2)))
+    printLine(winnerMsg(winner(p1, p2)))
 }
 
 object conv {
@@ -25,17 +25,17 @@ object conv {
     (f - 32) * 5.0/9.0
 
   def converter: IO[Unit] = for {
-    _ <- PrintLine("Enter a temperature in degrees Fahrenheit: ")
-    d <- ReadLine.map(_.toDouble)
-    _ <- PrintLine(fahrenheitToCelsius(d).toString)
+    _ <- printLine("Enter a temperature in degrees Fahrenheit: ")
+    d <- readLine.map(_.toDouble)
+    _ <- printLine(fahrenheitToCelsius(d).toString)
   } yield ()
 }
 
 object examples {
-  val echo = ReadLine.flatMap(PrintLine)
-  val readInt = ReadLine.map(_.toInt)
+  val echo = readLine flatMap printLine
+  val readInt = readLine map (_.toInt)
   val readInts = readInt ** readInt
-  val read5Lines: IO[List[String]] = replicateM(5)(ReadLine)
+  val read5Lines: IO[List[String]] = replicateM(5)(readLine)
 }
 
 object fact {
@@ -52,8 +52,8 @@ object fact {
   } yield result
 
   val factorialREPL: IO[Unit] = sequence_(
-    IO { println(helpstring) },
-    doWhile { IO { readLine } } { line => for {
+    printLine(helpstring),
+    doWhile { readLine } { line => for {
       _ <- when (line != "q") {
         for {
           n <- factorial(line.toInt)
@@ -76,6 +76,6 @@ object Main extends App {
 //
 //  read5Lines.flatMap(lines => PrintLine(lines.mkString("\n"))).run
 //  factorialREPL.run
-  var p = forever(PrintLine("Still going.."))
-  p.run
+  var p = forever(printLine("Still going.."))
+  run(p)
 }
