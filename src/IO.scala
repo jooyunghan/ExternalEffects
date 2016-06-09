@@ -1,9 +1,7 @@
 import scala.io.StdIn
 import functional._
 import io._
-import conv._
-import player._
-import examples._
+import fact._
 /**
   * Created by jooyung.han on 6/9/16.
   */
@@ -50,12 +48,16 @@ object functional {
       flatMap(ma)(a => map(mb)(b => f(a, b)))
   }
 
+  def unit[F[_],A](a: A)(implicit m: Monad[F]): F[A] = m.unit(a)
+
   implicit def operators[F[_], A](fa: F[A]): MonadOps[F, A] = MonadOps[F, A](fa)
 
   case class MonadOps[F[_], A](fa: F[A]) {
     def flatMap[B](f: A => F[B])(implicit m: Monad[F]): F[B] = m.flatMap(fa)(f)
     def map[B](f: A => B)(implicit m: Monad[F]): F[B] = m.map(fa)(f)
+
     def **[B](fb: F[B])(implicit m: Monad[F]): F[(A, B)] = m.map2(fa, fb)((_, _))
+    def skip(implicit m: Monad[F]): F[Unit] = map(_ => ())
   }
 
   def replicateM[F[_],A](n: Int)(fa: F[A])(implicit m: Monad[F]): F[List[A]] =
@@ -66,6 +68,32 @@ object functional {
     case Nil => m.unit(Nil)
     case a::as => m.map2(a, sequence(as))(_ :: _)
   }
+
+  def sequence_[F[_], A](actions: F[A]*)(implicit m: Monad[F]): F[Unit] =
+    skip { sequence(actions.toList) }
+
+  def skip[F[_], A](fa: => F[A])(implicit m: Monad[F]): F[Unit] = fa.skip
+
+  def foreachM[F[_],A](l: Stream[A])(f: A => F[Unit])(implicit m: Monad[F]): F[Unit] =
+    foldM_(l)(())((_, a) => skip(f(a)))
+
+  def doWhile[F[_],A](fa: => F[A])(cond: A => F[Boolean])(implicit m: Monad[F]): F[Unit] = for {
+    a <- fa
+    ok <- cond(a)
+    _ <- if (ok) doWhile(fa)(cond) else unit(())
+  } yield ()
+
+  def when[F[_],A](cond: Boolean)(body: => F[Unit])(implicit m: Monad[F]): F[Unit] =
+    if (cond) body else unit(())
+
+  def foldM[F[_],A,B](l: Stream[A])(z: B)(f: (B,A) => F[B])(implicit m: Monad[F]): F[B] =
+    l match {
+      case h #:: t => f(z, h) flatMap (z2 => foldM(t)(z2)(f))
+      case _ => unit(z)
+    }
+
+  def foldM_[F[_],A,B](l: Stream[A])(z: B)(f: (B,A) => F[B])(implicit m: Monad[F]): F[Unit] =
+    skip { foldM(l)(z)(f) }
 }
 
 object io {
@@ -85,6 +113,13 @@ object io {
 
   def ReadLine: IO[String] = IO { StdIn.readLine }
   def PrintLine(msg: String): IO[Unit] = IO { println(msg) }
+
+  class IORef[A](var a: A) {
+    def modify(f: A => A): IO[A] = IO { a = f(a); a }
+    def get: IO[A] = IO { a }
+  }
+  def ref[A](a: A): IO[IORef[A]] = IO { new IORef(a) }
+
 }
 
 object examples {
@@ -94,14 +129,42 @@ object examples {
   val read5Lines: IO[List[String]] = replicateM(5)(ReadLine)
 }
 
+object fact {
+  val helpstring =
+    """The Amazing Factorial REPL, v2.0
+      |q - quit
+      |<number> - compute the factorial of the given number
+      |<anything else> - crash spectacularly""".stripMargin
+
+  def factorial(n: Int): IO[Int] = for {
+    acc <- ref(1)
+    _ <- foreachM (1 to n toStream) (i => acc.modify(_ * i).skip)
+    result <- acc.get
+  } yield result
+
+  val factorialREPL: IO[Unit] = sequence_(
+    IO { println(helpstring) },
+    doWhile { IO { readLine } } { line => for {
+      _ <- when (line != "q") {
+        for {
+          n <- factorial(line.toInt)
+          _ <- IO {
+            println("factorial: " + n)
+          }
+        } yield ()
+      } } yield (line != "q") }
+  )
+}
+
 object Main extends App {
-  val x: IO[Unit] = contest(Player("LG", 3), Player("GS", 2))
-  x.run
-
-  val helloWorld: IO[List[Unit]] = sequence(List(PrintLine("Hello"), PrintLine("World")))
-  helloWorld.run
-
-  converter.run
-
-  read5Lines.flatMap(lines => PrintLine(lines.mkString("\n"))).run
+//  val x: IO[Unit] = contest(Player("LG", 3), Player("GS", 2))
+//  x.run
+//
+//  val helloWorld: IO[List[Unit]] = sequence(List(PrintLine("Hello"), PrintLine("World")))
+//  helloWorld.run
+//
+//  converter.run
+//
+//  read5Lines.flatMap(lines => PrintLine(lines.mkString("\n"))).run
+  factorialREPL.run
 }
