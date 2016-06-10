@@ -1,69 +1,78 @@
 package monad
 
+import scala.language.{higherKinds, implicitConversions}
+
 trait Functor[F[_]] {
   def map[A,B](fa: F[A])(f: A => B): F[B]
 }
 
-trait Monad[F[_]] extends Functor[F] {
+trait Monad[F[_]] extends Functor[F] { self =>
   def unit[A](a: => A): F[A]
+
   def flatMap[A,B](ma: F[A])(f: A => F[B]): F[B]
 
   def map[A,B](ma: F[A])(f: A => B): F[B] =
     flatMap(ma)(a => unit(f(a)))
+
   def map2[A,B,C](ma: F[A], mb: F[B])(f: (A, B) => C): F[C] =
     flatMap(ma)(a => map(mb)(b => f(a, b)))
-}
 
-object Monad {
-  def unit[F[_], A](a: A)(implicit m: Monad[F]): F[A] = m.unit(a)
+  def as[A, B](fa: F[A], b: B): F[B] =
+    map(fa)(_ => b)
 
-  implicit def operators[F[_]:Monad, A](fa: F[A]): MonadOps[F, A] = MonadOps[F, A](fa)
+  def skip[A](fa: F[A]): F[Unit] =
+    as(fa, ())
 
-  case class MonadOps[F[_]: Monad, A](fa: F[A]) {
-    def flatMap[B](f: A => F[B])(implicit m: Monad[F]): F[B] = m.flatMap(fa)(f)
-    def map[B](f: A => B)(implicit m: Monad[F]): F[B] = m.map(fa)(f)
+  def sequence[A](as: List[F[A]]): F[List[A]] =
+    as.foldRight(unit(List.empty[A]))(map2(_, _)(_ :: _))
 
-    def **[B](fb: F[B])(implicit m: Monad[F]): F[(A, B)] = m.map2(fa, fb)((_, _))
-    def skip: F[Unit] = map(_ => ())
-  }
+  def sequence_[A](as: F[A]*): F[Unit] =
+    skip { sequence(as.toList) }
 
-  def replicateM[F[_],A](n: Int)(fa: F[A])(implicit m: Monad[F]): F[List[A]] =
-    if (n == 0) m.unit(Nil)
-    else m.map2(fa, replicateM(n-1)(fa))(_ :: _)
-
-  def sequence[F[_], A](actions: List[F[A]])(implicit m: Monad[F]): F[List[A]] = actions match {
-    case Nil => m.unit(Nil)
-    case a::as => m.map2(a, sequence(as))(_ :: _)
-  }
-
-  def sequence_[F[_], A](actions: F[A]*)(implicit m: Monad[F]): F[Unit] =
-    skip { sequence(actions.toList) }
-
-  def skip[F[_], A](fa: => F[A])(implicit m: Monad[F]): F[Unit] = fa.skip
-
-  def foreachM[F[_], A](l: Stream[A])(f: A => F[Unit])(implicit m: Monad[F]): F[Unit] =
+  def foreachM[A](l: Stream[A])(f: A => F[Unit]): F[Unit] =
     foldM_(l)(())((_, a) => skip(f(a)))
 
-  def doWhile[F[_],A](fa: => F[A])(cond: A => F[Boolean])(implicit m: Monad[F]): F[Unit] = for {
+  def replicateM[A](n: Int)(fa: F[A]): F[List[A]] =
+    sequence(List.fill(n)(fa))
+
+  def doWhile[A](fa: => F[A])(cond: A => F[Boolean]): F[Unit] = for {
     a <- fa
     ok <- cond(a)
     _ <- if (ok) doWhile(fa)(cond) else unit(())
   } yield ()
 
-  def when[F[_]:Monad, A](cond: Boolean)(body: => F[Unit]): F[Unit] =
+  def when[A](cond: Boolean)(body: => F[Unit]): F[Unit] =
     if (cond) body else unit(())
 
-  def forever[F[_]:Monad, A, B](fa: F[A]): F[B] = {
+  def forever[A, B](fa: F[A]): F[B] = {
     lazy val t: F[B] = forever(fa)
     fa flatMap (_ => t)
   }
 
-  def foldM[F[_],A,B](l: Stream[A])(z: B)(f: (B,A) => F[B])(implicit m: Monad[F]): F[B] =
+  def foldM[A,B](l: Stream[A])(z: B)(f: (B,A) => F[B]): F[B] =
     l match {
       case h #:: t => f(z, h) flatMap (z2 => foldM(t)(z2)(f))
       case _ => unit(z)
     }
 
-  def foldM_[F[_],A,B](l: Stream[A])(z: B)(f: (B,A) => F[B])(implicit m: Monad[F]): F[Unit] =
+  def foldM_[A,B](l: Stream[A])(z: B)(f: (B,A) => F[B]): F[Unit] =
     skip { foldM(l)(z)(f) }
+
+  implicit def operators[A](fa: F[A]): MonadOps[F, A] = new MonadOps[F, A] {
+    val F = self
+    def get = fa
+  }
+}
+
+trait MonadOps[F[_], A] {
+  val F: Monad[F]
+  def get: F[A]
+
+  private val a = get
+
+  def flatMap[B](f: A => F[B]): F[B] = F.flatMap(a)(f)
+  def map[B](f: A => B): F[B] = F.map(a)(f)
+
+  def **[B](fb: F[B]): F[(A, B)] = F.map2(a, fb)((_, _))
+  def skip: F[Unit] = map(_ => ())
 }

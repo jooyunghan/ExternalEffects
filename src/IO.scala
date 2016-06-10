@@ -1,8 +1,6 @@
 import io.IO
 import io.IO._
-import fact._
 import monad.Monad
-import monad.Monad._
 
 object player {
   case class Player(name: String, score: Int)
@@ -32,6 +30,8 @@ object conv {
 }
 
 object examples {
+  import IO._
+
   val echo = readLine flatMap printLine
   val readInt = readLine map (_.toInt)
   val readInts = readInt ** readInt
