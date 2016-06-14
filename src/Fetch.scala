@@ -117,7 +117,10 @@ object Job {
       case PureJob(value: S) => PureJob(f(value))
       case job => MapJob(f, job)
     }
-    case PairJob(a, b) => PairJob(simplifyStructure(a), simplifyStructure(b)).asInstanceOf[Job[T]]
+    case PairJob(a, b) => (simplifyStructure(a), simplifyStructure(b)) match {
+      case (PureJob(a), PureJob(b)) => PureJob((a, b)).asInstanceOf[Job[T]]
+      case (a, b) => PairJob(a, b).asInstanceOf[Job[T]]
+    }
     case FetchJob(url, reads) => sys.error("Can't happen")
   }
 }
