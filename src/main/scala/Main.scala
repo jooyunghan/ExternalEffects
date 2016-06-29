@@ -1,6 +1,5 @@
 import io.IO
 import io.IO._
-import monad.Monad
 
 object player {
   case class Player(name: String, score: Int)
@@ -57,9 +56,7 @@ object fact {
       _ <- when (line != "q") {
         for {
           n <- factorial(line.toInt)
-          _ <- IO {
-            println("factorial: " + n)
-          }
+          _ <- printLine("factorial: " + n)
         } yield ()
       } } yield (line != "q") }
   )

@@ -14,8 +14,6 @@ case class Suspend[A](resume: () => A) extends IO[A]
 case class FlatMap[A, B](sub: IO[A], k: A => IO[B]) extends IO[B]
 
 object IO extends Monad[IO] {
-  def apply[A](a: => A): IO[A] = new IO[A] { def run = a }
-
   def unit[A](a: => A): IO[A] = Return(a)
   def flatMap[A,B](fa: IO[A])(f: A => IO[B]) = fa.flatMap(f)
   def suspend[A](a: => IO[A]): IO[A] =
@@ -26,7 +24,7 @@ object IO extends Monad[IO] {
     case Return(a) => a
     case Suspend(r) => r()
     case FlatMap(x, f) => x match {
-      case Return(a) => run(f(a))
+      case Return(b) => run(f(b))
       case Suspend(r) => run(f(r()))
       case FlatMap(y, g) => run(y flatMap (a => g(a) flatMap f))
     }
@@ -36,9 +34,9 @@ object IO extends Monad[IO] {
   def printLine(s: String): IO[Unit] = Suspend(() => println(s))
 
   class IORef[A](var a: A) {
-    def modify(f: A => A): IO[A] = IO { a = f(a); a }
-    def get: IO[A] = IO { a }
+    def modify(f: A => A): IO[A] = Suspend(() => {a = f(a); a })
+    def get: IO[A] = Suspend(() => a)
   }
 
-  def ref[A](a: A): IO[IORef[A]] = IO { new IORef(a) }
+  def ref[A](a: A): IO[IORef[A]] = Suspend(() => new IORef(a))
 }
